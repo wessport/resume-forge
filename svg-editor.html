@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resume SVG Editor</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.2.3/dist/svg2pdf.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+        }
+
+        .toolbar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 60px;
+            background: #16213e;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            gap: 15px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        }
+
+        .toolbar h1 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-right: auto;
+        }
+
+        .toolbar button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #4361ee;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #3651d4;
+        }
+
+        .btn-secondary {
+            background: #2d3748;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #4a5568;
+        }
+
+        .btn-success {
+            background: #38a169;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #2f855a;
+        }
+
+        .page-indicator {
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .page-ok {
+            background: #38a169;
+            color: white;
+        }
+
+        .page-warning {
+            background: #dd6b20;
+            color: white;
+        }
+
+        .page-overflow {
+            background: #e53e3e;
+            color: white;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .main-container {
+            display: flex;
+            margin-top: 60px;
+            height: calc(100vh - 60px);
+        }
+
+        .editor-panel {
+            flex: 1;
+            overflow: auto;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        .svg-container {
+            position: relative;
+            background: white;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+        }
+
+        .svg-container svg {
+            display: block;
+        }
+
+        /* Page break indicator */
+        .page-break-line {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 0;
+            border-top: 2px dashed #e53e3e;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .page-break-label {
+            position: absolute;
+            right: 10px;
+            transform: translateY(-50%);
+            background: #e53e3e;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .page-two-area {
+            position: absolute;
+            left: 0;
+            right: 0;
+            background: repeating-linear-gradient(
+                45deg,
+                rgba(229, 62, 62, 0.03),
+                rgba(229, 62, 62, 0.03) 10px,
+                rgba(229, 62, 62, 0.06) 10px,
+                rgba(229, 62, 62, 0.06) 20px
+            );
+            pointer-events: none;
+            z-index: 99;
+        }
+
+        .page-two-label {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(229, 62, 62, 0.9);
+            color: white;
+            padding: 8px 20px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .svg-container svg text {
+            cursor: pointer;
+            transition: fill 0.2s;
+        }
+
+        .svg-container svg text:hover {
+            fill: #4361ee !important;
+        }
+
+        .svg-container svg text.editing {
+            fill: #4361ee !important;
+        }
+
+        .page-overflow-indicator {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 50px;
+            background: rgba(229, 62, 62, 0.2);
+            border-top: 3px dashed #e53e3e;
+            display: none;
+            pointer-events: none;
+        }
+
+        .page-overflow-indicator.visible {
+            display: block;
+        }
+
+        .page-overflow-label {
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #e53e3e;
+            color: white;
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .sidebar {
+            width: 350px;
+            background: #16213e;
+            padding: 20px;
+            overflow-y: auto;
+            border-left: 1px solid #2d3748;
+        }
+
+        .sidebar h2 {
+            font-size: 16px;
+            margin-bottom: 15px;
+            color: #a0aec0;
+        }
+
+        .element-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .element-item {
+            background: #1a1a2e;
+            padding: 10px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .element-item:hover {
+            border-color: #4361ee;
+            background: #1e2a4a;
+        }
+
+        .element-item.selected {
+            border-color: #4361ee;
+            background: #1e3a5f;
+        }
+
+        .element-item .id {
+            color: #4361ee;
+            font-weight: 600;
+            font-size: 11px;
+            margin-bottom: 4px;
+        }
+
+        .element-item .preview {
+            color: #a0aec0;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            padding: 15px;
+            background: #1a1a2e;
+            border-radius: 8px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .instructions h3 {
+            color: #4361ee;
+            margin-bottom: 10px;
+        }
+
+        .instructions ul {
+            padding-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 5px;
+            color: #a0aec0;
+        }
+
+        .text-editor-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+        }
+
+        .text-editor-modal.visible {
+            display: flex;
+        }
+
+        .text-editor-content {
+            background: #16213e;
+            padding: 25px;
+            border-radius: 12px;
+            width: 600px;
+            max-width: 90vw;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .text-editor-content h3 {
+            margin-bottom: 15px;
+            color: #4361ee;
+        }
+
+        .text-editor-content label {
+            display: block;
+            margin-bottom: 8px;
+            color: #a0aec0;
+            font-size: 13px;
+        }
+
+        .text-editor-content textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            border: 2px solid #2d3748;
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            resize: vertical;
+            background: #1a1a2e;
+            color: #eee;
+        }
+
+        .text-editor-content textarea:focus {
+            outline: none;
+            border-color: #4361ee;
+        }
+
+        .text-editor-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+            justify-content: flex-end;
+        }
+
+        .status-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background: #0f0f1a;
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .status-bar span {
+            margin-right: 20px;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <h1>Resume SVG Editor</h1>
+        <input type="file" id="file-input" accept=".svg" style="display: none;">
+        <button class="btn-secondary" onclick="document.getElementById('file-input').click()">Load SVG</button>
+        <button class="btn-secondary" id="reload-btn">Reload Template</button>
+        <button class="btn-primary" id="export-svg-btn">Export SVG</button>
+        <button class="btn-success" id="export-pdf-btn">Save as PDF</button>
+        <div class="page-indicator page-ok" id="page-indicator">Single Page OK</div>
+    </div>
+
+    <div class="main-container">
+        <div class="editor-panel">
+            <div class="svg-container" id="svg-container">
+                <!-- SVG will be loaded here -->
+                <div class="page-break-line" id="page-break-line" style="display: none;">
+                    <span class="page-break-label">Page Break</span>
+                </div>
+                <div class="page-two-area" id="page-two-area" style="display: none;">
+                    <span class="page-two-label">Page 2 (Content will be cut off)</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <h2>Text Elements</h2>
+            <div class="element-list" id="element-list">
+                <div style="color: #666; font-style: italic;">Loading...</div>
+            </div>
+
+            <div class="instructions">
+                <h3>Instructions</h3>
+                <ul>
+                    <li>Click any text to edit it directly</li>
+                    <li>Use the sidebar to navigate elements</li>
+                    <li>Watch the page indicator for overflow</li>
+                    <li>Export as SVG or PDF when done</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div class="text-editor-modal" id="text-editor-modal">
+        <div class="text-editor-content">
+            <h3 id="editor-title">Edit Text</h3>
+            <label for="text-input">Text Content:</label>
+            <textarea id="text-input" placeholder="Enter text..."></textarea>
+            <div class="text-editor-buttons">
+                <button class="btn-secondary" id="cancel-btn">Cancel</button>
+                <button class="btn-primary" id="save-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="status-text">Ready</span>
+        <span id="element-count">Elements: 0</span>
+    </div>
+
+    <script>
+        // Constants
+        const PAGE_HEIGHT = 792; // Letter size in points
+        const PAGE_WIDTH = 612;
+
+        // State
+        let svgElement = null;
+        let selectedElementId = null;
+        let textElements = [];
+
+        // DOM Elements
+        const svgContainer = document.getElementById('svg-container');
+        const elementList = document.getElementById('element-list');
+        const pageIndicator = document.getElementById('page-indicator');
+        const textEditorModal = document.getElementById('text-editor-modal');
+        const textInput = document.getElementById('text-input');
+        const editorTitle = document.getElementById('editor-title');
+        const statusText = document.getElementById('status-text');
+        const elementCount = document.getElementById('element-count');
+        const pageBreakLine = document.getElementById('page-break-line');
+        const pageTwoArea = document.getElementById('page-two-area');
+
+        // Load SVG from URL or file
+        async function loadSVG(source) {
+            try {
+                statusText.textContent = 'Loading SVG...';
+
+                let svgText;
+                if (typeof source === 'string') {
+                    const response = await fetch(source);
+                    svgText = await response.text();
+                } else {
+                    svgText = await source.text();
+                }
+
+                // Parse and insert SVG
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(svgText, 'image/svg+xml');
+                svgElement = doc.documentElement;
+
+                // Clear and insert SVG
+                svgContainer.innerHTML = '';
+                svgContainer.appendChild(svgElement);
+
+                // Re-create page break indicators (they were cleared with innerHTML)
+                const pageBreakLineEl = document.createElement('div');
+                pageBreakLineEl.id = 'page-break-line';
+                pageBreakLineEl.className = 'page-break-line';
+                pageBreakLineEl.innerHTML = '<span class="page-break-label">Page Break</span>';
+                svgContainer.appendChild(pageBreakLineEl);
+
+                const pageTwoAreaEl = document.createElement('div');
+                pageTwoAreaEl.id = 'page-two-area';
+                pageTwoAreaEl.className = 'page-two-area';
+                pageTwoAreaEl.innerHTML = '<span class="page-two-label">Page 2 (Content will be cut off)</span>';
+                pageTwoAreaEl.style.display = 'none';
+                svgContainer.appendChild(pageTwoAreaEl);
+
+                // Setup text elements
+                setupTextElements();
+                updateElementList();
+                checkPageOverflow();
+
+                statusText.textContent = 'SVG loaded successfully';
+            } catch (error) {
+                console.error('Error loading SVG:', error);
+                statusText.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // Setup text elements for editing
+        function setupTextElements() {
+            textElements = [];
+            const texts = svgElement.querySelectorAll('text');
+
+            texts.forEach((text, index) => {
+                const id = text.id || `text-${index}`;
+                if (!text.id) text.id = id;
+
+                // Get text content (handle tspans)
+                let content = '';
+                const tspans = text.querySelectorAll('tspan');
+                if (tspans.length > 0) {
+                    content = Array.from(tspans).map(t => t.textContent).join('\n');
+                } else {
+                    content = text.textContent;
+                }
+
+                textElements.push({
+                    id: id,
+                    element: text,
+                    content: content.trim()
+                });
+
+                // Add click handler
+                text.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    selectElement(id);
+                    showEditor(id);
+                });
+            });
+
+            elementCount.textContent = `Elements: ${textElements.length}`;
+        }
+
+        // Update element list in sidebar
+        function updateElementList() {
+            if (textElements.length === 0) {
+                elementList.innerHTML = '<div style="color: #666; font-style: italic;">No text elements found</div>';
+                return;
+            }
+
+            elementList.innerHTML = textElements.map(el => `
+                <div class="element-item ${selectedElementId === el.id ? 'selected' : ''}" data-id="${el.id}">
+                    <div class="id">#${el.id}</div>
+                    <div class="preview">${el.content.split('\n')[0].substring(0, 50)}${el.content.length > 50 ? '...' : ''}</div>
+                </div>
+            `).join('');
+
+            // Add click handlers
+            elementList.querySelectorAll('.element-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const id = item.dataset.id;
+                    selectElement(id);
+                    showEditor(id);
+
+                    // Scroll to element
+                    const textEl = svgElement.getElementById(id);
+                    if (textEl) {
+                        textEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                });
+            });
+        }
+
+        // Select an element
+        function selectElement(id) {
+            // Deselect previous
+            if (selectedElementId) {
+                const prev = svgElement.getElementById(selectedElementId);
+                if (prev) prev.classList.remove('editing');
+            }
+
+            selectedElementId = id;
+
+            // Select new
+            const el = svgElement.getElementById(id);
+            if (el) el.classList.add('editing');
+
+            updateElementList();
+        }
+
+        // Show text editor modal
+        function showEditor(id) {
+            const textEl = textElements.find(t => t.id === id);
+            if (!textEl) return;
+
+            editorTitle.textContent = `Edit: #${id}`;
+            textInput.value = textEl.content;
+            textInput.dataset.elementId = id;
+            textEditorModal.classList.add('visible');
+            textInput.focus();
+        }
+
+        // Hide editor modal
+        function hideEditor() {
+            textEditorModal.classList.remove('visible');
+            if (selectedElementId) {
+                const el = svgElement.getElementById(selectedElementId);
+                if (el) el.classList.remove('editing');
+            }
+            selectedElementId = null;
+            updateElementList();
+        }
+
+        // Save text edit
+        function saveEdit() {
+            const id = textInput.dataset.elementId;
+            const newContent = textInput.value;
+
+            const textEl = textElements.find(t => t.id === id);
+            if (!textEl) return;
+
+            const svgText = svgElement.getElementById(id);
+            if (!svgText) return;
+
+            // Update content
+            textEl.content = newContent;
+
+            // Update SVG - handle tspans
+            const tspans = svgText.querySelectorAll('tspan');
+            const lines = newContent.split('\n');
+
+            if (tspans.length > 0) {
+                // Update existing tspans
+                tspans.forEach((tspan, i) => {
+                    if (i < lines.length) {
+                        tspan.textContent = lines[i];
+                    } else {
+                        tspan.textContent = '';
+                    }
+                });
+
+                // If more lines than tspans, append to last tspan
+                if (lines.length > tspans.length) {
+                    const lastTspan = tspans[tspans.length - 1];
+                    const extraLines = lines.slice(tspans.length);
+                    lastTspan.textContent += ' ' + extraLines.join(' ');
+                }
+            } else {
+                // No tspans, update directly
+                svgText.textContent = newContent.replace(/\n/g, ' ');
+            }
+
+            hideEditor();
+            checkPageOverflow();
+            statusText.textContent = `Updated: #${id}`;
+        }
+
+        // Check for page overflow and update visual indicators
+        function checkPageOverflow() {
+            if (!svgElement) return;
+
+            // Get SVG dimensions and calculate scale
+            const svgRect = svgElement.getBoundingClientRect();
+            const viewBox = svgElement.viewBox.baseVal;
+            const scaleY = svgRect.height / (viewBox.height || PAGE_HEIGHT);
+
+            // Calculate page break position in pixels
+            const pageBreakY = PAGE_HEIGHT * scaleY;
+
+            // Find the lowest text element
+            let maxContentY = 0;
+            textElements.forEach(el => {
+                const textEl = svgElement.getElementById(el.id);
+                if (textEl) {
+                    try {
+                        const bbox = textEl.getBBox();
+                        const bottomY = bbox.y + bbox.height;
+                        if (bottomY > maxContentY) {
+                            maxContentY = bottomY;
+                        }
+                    } catch (e) {
+                        // getBBox can fail on hidden elements
+                    }
+                }
+            });
+
+            // Get page break elements (they're re-created on each load)
+            const pageBreakEl = document.getElementById('page-break-line');
+            const pageTwoEl = document.getElementById('page-two-area');
+
+            // Show page break line always (as reference)
+            if (pageBreakEl) {
+                pageBreakEl.style.display = 'block';
+                pageBreakEl.style.top = pageBreakY + 'px';
+            }
+
+            // Check if content overflows
+            const hasOverflow = maxContentY > PAGE_HEIGHT;
+            const nearLimit = maxContentY > PAGE_HEIGHT * 0.90;
+
+            if (hasOverflow) {
+                // Show page 2 area
+                if (pageTwoEl) {
+                    pageTwoEl.style.display = 'block';
+                    pageTwoEl.style.top = pageBreakY + 'px';
+                    pageTwoEl.style.height = (svgRect.height - pageBreakY + 100) + 'px';
+                }
+
+                pageIndicator.className = 'page-indicator page-overflow';
+                pageIndicator.textContent = 'PAGE OVERFLOW!';
+            } else {
+                // Hide page 2 area
+                if (pageTwoEl) {
+                    pageTwoEl.style.display = 'none';
+                }
+
+                if (nearLimit) {
+                    pageIndicator.className = 'page-indicator page-warning';
+                    pageIndicator.textContent = 'Near Page Limit';
+                } else {
+                    pageIndicator.className = 'page-indicator page-ok';
+                    pageIndicator.textContent = 'Single Page OK';
+                }
+            }
+
+            // Update status with actual usage
+            const usagePercent = Math.round((maxContentY / PAGE_HEIGHT) * 100);
+            statusText.textContent = `Page usage: ${usagePercent}%`;
+        }
+
+        // Export as SVG
+        function exportSVG() {
+            if (!svgElement) return;
+
+            const svgData = new XMLSerializer().serializeToString(svgElement);
+            const blob = new Blob([svgData], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'resume.svg';
+            a.click();
+
+            URL.revokeObjectURL(url);
+            statusText.textContent = 'SVG exported';
+        }
+
+        // Export as PDF
+        async function exportPDF() {
+            if (!svgElement) return;
+
+            statusText.textContent = 'Generating PDF...';
+
+            try {
+                const { jsPDF } = window.jspdf;
+
+                // Create PDF with letter size
+                const pdf = new jsPDF({
+                    orientation: 'portrait',
+                    unit: 'pt',
+                    format: [PAGE_WIDTH, PAGE_HEIGHT]
+                });
+
+                // Clone SVG for export
+                const exportSvg = svgElement.cloneNode(true);
+
+                // Remove editing classes
+                exportSvg.querySelectorAll('.editing').forEach(el => el.classList.remove('editing'));
+
+                // Add to document temporarily
+                exportSvg.style.position = 'absolute';
+                exportSvg.style.left = '-9999px';
+                document.body.appendChild(exportSvg);
+
+                // svg2pdf.js UMD exposes svg2pdf on window
+                const svg2pdfFn = window.svg2pdf?.svg2pdf || window.svg2pdf;
+                if (typeof svg2pdfFn === 'function') {
+                    await svg2pdfFn(exportSvg, pdf, {
+                        x: 0,
+                        y: 0,
+                        width: PAGE_WIDTH,
+                        height: PAGE_HEIGHT
+                    });
+                } else {
+                    // Fallback: use jsPDF's built-in svg method if svg2pdf didn't load
+                    await pdf.svg(exportSvg, {
+                        x: 0,
+                        y: 0,
+                        width: PAGE_WIDTH,
+                        height: PAGE_HEIGHT
+                    });
+                }
+
+                document.body.removeChild(exportSvg);
+
+                pdf.save('resume.pdf');
+                statusText.textContent = 'PDF exported successfully';
+            } catch (error) {
+                console.error('Error exporting PDF:', error);
+                statusText.textContent = 'Error: ' + error.message;
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('file-input').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) loadSVG(file);
+        });
+
+        document.getElementById('reload-btn').addEventListener('click', () => {
+            loadSVG('resume_template.svg');
+        });
+
+        document.getElementById('export-svg-btn').addEventListener('click', exportSVG);
+        document.getElementById('export-pdf-btn').addEventListener('click', exportPDF);
+        document.getElementById('cancel-btn').addEventListener('click', hideEditor);
+        document.getElementById('save-btn').addEventListener('click', saveEdit);
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                hideEditor();
+            }
+            if (e.key === 'Enter' && e.ctrlKey && textEditorModal.classList.contains('visible')) {
+                saveEdit();
+            }
+        });
+
+        // Click outside modal to close
+        textEditorModal.addEventListener('click', (e) => {
+            if (e.target === textEditorModal) {
+                hideEditor();
+            }
+        });
+
+        // Auto-load template on page load
+        window.addEventListener('load', () => {
+            loadSVG('resume_template.svg');
+        });
+    </script>
+</body>
+</html>
