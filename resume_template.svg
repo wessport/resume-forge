@@ -62,14 +62,14 @@
      font-family="Arial, sans-serif"
      font-size="28px"
      font-weight="bold"
-     fill="#1a1a2e">WESLEY PORTER</text>
+     fill="#1a1a2e">YOUR NAME</text>
   <text
      id="contact"
      x="52"
      y="91"
      font-family="Arial, sans-serif"
      font-size="10px"
-     fill="#444444">Nashville, TN • wesporter92@gmail.com • www.geoalchemist.com</text>
+     fill="#444444">City, State • your.email@example.com • www.yourwebsite.com</text>
   <!-- Title -->
   <text
      id="title"
