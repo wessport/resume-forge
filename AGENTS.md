@@ -1,5 +1,9 @@
 # Resume Forge — Agent Guidelines
 
+## Git Workflow
+
+- **Never push directly to `main`.** Create a feature branch for changes and use a pull request/merge request workflow instead of pushing commits directly to `main`.
+
 ## SVG Templates
 
 - **Never edit existing SVG template files directly.** Always create a new copy with a descriptive name (e.g., `wporter_resume_de_focus.svg`) and make changes there. The originals serve as base templates.
