@@ -78,6 +78,15 @@
             background: #2f855a;
         }
 
+        .btn-danger {
+            background: #e53e3e;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c53030;
+        }
+
         .page-indicator {
             padding: 8px 16px;
             border-radius: 6px;
@@ -436,7 +445,8 @@
             <label for="text-input">Text Content:</label>
             <textarea id="text-input" placeholder="Enter text..."></textarea>
             <div class="text-editor-buttons">
-                <button class="btn-secondary" id="cancel-btn">Cancel</button>
+                <button class="btn-danger" id="delete-btn">Delete Block</button>
+                <button class="btn-secondary" id="cancel-btn" style="margin-left: auto;">Cancel</button>
                 <button class="btn-primary" id="save-btn">Save Changes</button>
             </div>
         </div>
@@ -456,6 +466,7 @@
         let svgElement = null;
         let selectedElementId = null;
         let textElements = [];
+        let loadedFileName = 'resume'; // Base name without extension
 
         // DOM Elements
         const svgContainer = document.getElementById('svg-container');
@@ -478,8 +489,13 @@
                 if (typeof source === 'string') {
                     const response = await fetch(source);
                     svgText = await response.text();
+                    // Extract base name from URL
+                    const cleanSource = source.split(/[?#]/)[0];
+                    loadedFileName = cleanSource.replace(/\.svg$/i, '').replace(/^.*\//, '') || 'resume';
                 } else {
                     svgText = await source.text();
+                    // Extract base name from uploaded file
+                    loadedFileName = (source.name || 'resume').replace(/\.svg$/i, '');
                 }
 
                 // Parse and insert SVG
@@ -666,6 +682,79 @@
             statusText.textContent = `Updated: #${id}`;
         }
 
+        // Delete selected element and shift elements below upward
+        function deleteElement() {
+            const id = textInput.dataset.elementId;
+            if (!id) return;
+
+            if (!confirm(`Delete #${id}? Elements below will shift up.`)) return;
+
+            const svgText = svgElement.getElementById(id);
+            if (!svgText) return;
+
+            // Get position info before removing
+            const bbox = svgText.getBBox();
+            const deletedBottom = bbox.y + bbox.height;
+            const deletedTop = bbox.y;
+
+            // Calculate shift amount - find gap to next element below
+            let minGapBelow = Infinity;
+            svgElement.querySelectorAll('text, g, line').forEach(el => {
+                if (el === svgText || svgText.contains(el) || el.closest('g') === svgText) return;
+                try {
+                    const elBbox = el.getBBox();
+                    if (elBbox.y > deletedTop && elBbox.y < deletedBottom + 50) {
+                        const gap = elBbox.y - deletedBottom;
+                        if (gap >= 0 && gap < minGapBelow) minGapBelow = gap;
+                    }
+                } catch(e) {}
+            });
+
+            const shiftAmount = bbox.height + (minGapBelow !== Infinity ? minGapBelow : 14);
+
+            // Remove the element
+            svgText.remove();
+
+            // Shift elements below upward
+            svgElement.querySelectorAll('text, g[id], line').forEach(el => {
+                try {
+                    const elBbox = el.getBBox();
+                    // Only shift elements that were below the deleted element
+                    if (elBbox.y >= deletedBottom - 2) {
+                        if (el.tagName === 'text') {
+                            const currentY = parseFloat(el.getAttribute('y'));
+                            if (!isNaN(currentY)) {
+                                el.setAttribute('y', currentY - shiftAmount);
+                            }
+                        } else if (el.tagName === 'g' && el.hasAttribute('transform')) {
+                            const transform = el.getAttribute('transform');
+                            const match = transform.match(/matrix\(([^)]+)\)/);
+                            if (match) {
+                                const values = match[1].split(',').map(v => parseFloat(v.trim()));
+                                if (values.length >= 6) {
+                                    values[5] -= shiftAmount;
+                                    el.setAttribute('transform', `matrix(${values.join(',')})`);
+                                }
+                            }
+                        } else if (el.tagName === 'line') {
+                            const y1 = parseFloat(el.getAttribute('y1'));
+                            const y2 = parseFloat(el.getAttribute('y2'));
+                            if (!isNaN(y1)) el.setAttribute('y1', y1 - shiftAmount);
+                            if (!isNaN(y2)) el.setAttribute('y2', y2 - shiftAmount);
+                        }
+                    }
+                } catch(e) {}
+            });
+
+            // Clean up state
+            textElements = textElements.filter(t => t.id !== id);
+            selectedElementId = null;
+            hideEditor();
+            updateElementList();
+            checkPageOverflow();
+            statusText.textContent = `Deleted: #${id}`;
+        }
+
         // Check for page overflow and update visual indicators
         function checkPageOverflow() {
             if (!svgElement) return;
@@ -739,21 +828,50 @@
             statusText.textContent = `Page usage: ${usagePercent}%`;
         }
 
+        // Save a blob using the File System Access API, with fallback to download
+        async function saveWithPicker(blob, suggestedName, fileTypes) {
+            if ('showSaveFilePicker' in window) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName,
+                        types: fileTypes
+                    });
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                    return handle.name;
+                } catch (err) {
+                    if (err.name === 'AbortError') return null; // User cancelled
+                    throw err;
+                }
+            }
+            // Fallback for browsers without File System Access API
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = suggestedName;
+            a.click();
+            URL.revokeObjectURL(url);
+            return suggestedName;
+        }
+
         // Export as SVG
-        function exportSVG() {
+        async function exportSVG() {
             if (!svgElement) return;
 
             const svgData = new XMLSerializer().serializeToString(svgElement);
             const blob = new Blob([svgData], { type: 'image/svg+xml' });
-            const url = URL.createObjectURL(blob);
 
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'resume.svg';
-            a.click();
+            const saved = await saveWithPicker(blob, `${loadedFileName}.svg`, [{
+                description: 'SVG Files',
+                accept: { 'image/svg+xml': ['.svg'] }
+            }]);
 
-            URL.revokeObjectURL(url);
-            statusText.textContent = 'SVG exported';
+            if (saved) {
+                statusText.textContent = `SVG exported: ${saved}`;
+            } else {
+                statusText.textContent = 'Export cancelled';
+            }
         }
 
         // Export as PDF
@@ -804,8 +922,17 @@
 
                 document.body.removeChild(exportSvg);
 
-                pdf.save('resume.pdf');
-                statusText.textContent = 'PDF exported successfully';
+                const pdfBlob = pdf.output('blob');
+                const saved = await saveWithPicker(pdfBlob, `${loadedFileName}.pdf`, [{
+                    description: 'PDF Files',
+                    accept: { 'application/pdf': ['.pdf'] }
+                }]);
+
+                if (saved) {
+                    statusText.textContent = `PDF exported: ${saved}`;
+                } else {
+                    statusText.textContent = 'Export cancelled';
+                }
             } catch (error) {
                 console.error('Error exporting PDF:', error);
                 statusText.textContent = 'Error: ' + error.message;
@@ -826,6 +953,7 @@
         document.getElementById('export-pdf-btn').addEventListener('click', exportPDF);
         document.getElementById('cancel-btn').addEventListener('click', hideEditor);
         document.getElementById('save-btn').addEventListener('click', saveEdit);
+        document.getElementById('delete-btn').addEventListener('click', deleteElement);
 
         // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
