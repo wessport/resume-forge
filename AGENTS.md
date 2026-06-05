@@ -20,6 +20,7 @@
     echo "ERROR: forbidden AI metadata found"
   ```
   If the command prints forbidden metadata, rewrite the affected commit message before pushing.
+- **After pushing a feature branch, stop and give Wesley the pull request link.** Do not continue to the next task, create follow-up commits, or attempt merge-related actions until Wesley reviews the PR link and gives explicit next instructions.
 - **Do not merge pull requests without explicit user approval.** Opening, updating, reviewing, and summarizing PRs is fine; stop before merge unless the user clearly approves that specific merge.
 
 ## SVG Templates
