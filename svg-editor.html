@@ -118,7 +118,7 @@
         .main-container {
             display: flex;
             margin-top: 60px;
-            height: calc(100vh - 60px);
+            height: calc(100vh - 90px);
         }
 
         .editor-panel {
@@ -126,11 +126,13 @@
             overflow: auto;
             padding: 20px;
             display: flex;
-            justify-content: center;
+            justify-content: flex-start;
             align-items: flex-start;
         }
 
         .svg-container {
+            flex: 0 0 auto;
+            margin: 0 auto;
             position: relative;
             background: white;
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
@@ -480,6 +482,16 @@
         const pageBreakLine = document.getElementById('page-break-line');
         const pageTwoArea = document.getElementById('page-two-area');
 
+        function resetPreviewScroll() {
+            const editorPanel = document.querySelector('.editor-panel');
+            if (!editorPanel) return;
+
+            requestAnimationFrame(() => {
+                editorPanel.scrollTop = 0;
+                editorPanel.scrollLeft = 0;
+            });
+        }
+
         // Load SVG from URL or file
         async function loadSVG(source) {
             try {
@@ -525,6 +537,7 @@
                 setupTextElements();
                 updateElementList();
                 checkPageOverflow();
+                resetPreviewScroll();
 
                 statusText.textContent = 'SVG loaded successfully';
             } catch (error) {
